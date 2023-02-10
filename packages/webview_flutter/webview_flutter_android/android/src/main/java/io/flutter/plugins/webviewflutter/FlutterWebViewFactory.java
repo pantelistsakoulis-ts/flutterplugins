@@ -5,6 +5,9 @@
 package io.flutter.plugins.webviewflutter;
 
 import android.content.Context;
+
+import androidx.annotation.NonNull;
+
 import io.flutter.plugin.common.StandardMessageCodec;
 import io.flutter.plugin.platform.PlatformView;
 import io.flutter.plugin.platform.PlatformViewFactory;
@@ -17,6 +20,7 @@ class FlutterWebViewFactory extends PlatformViewFactory {
     this.instanceManager = instanceManager;
   }
 
+  @NonNull
   @Override
   public PlatformView create(Context context, int id, Object args) {
     final PlatformView view = (PlatformView) instanceManager.getInstance((Integer) args);

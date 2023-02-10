@@ -12,10 +12,15 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebChromeClientHostApi;
 import java.util.Objects;
 
@@ -26,8 +31,7 @@ import java.util.Objects;
  */
 public class WebChromeClientHostApiImpl implements WebChromeClientHostApi {
   private final InstanceManager instanceManager;
-  private final WebChromeClientCreator webChromeClientCreator;
-  private final WebChromeClientFlutterApiImpl flutterApi;
+  private final WebChromeClientImpl webChromeClient;
 
   /**
    * Implementation of {@link WebChromeClient} that passes arguments of callback methods to Dart.
@@ -87,6 +91,42 @@ public class WebChromeClientHostApiImpl implements WebChromeClientHostApi {
    */
   public static class SecureWebChromeClient extends WebChromeClient {
     @Nullable private WebViewClient webViewClient;
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    @Override
+    public boolean onShowFileChooser(
+        WebView webView,
+        ValueCallback<Uri[]> filePathCallback,
+        FileChooserParams fileChooserParams) {
+      Executors.newCachedThreadPool()
+          .execute(
+              () -> {
+                try {
+                  WebViewFlutterPlugin.requestCameraPermission().get();
+
+                  String contentType = "";
+
+                  if (fileChooserParams.getAcceptTypes().length > 0) {
+                    contentType = String.join(",", fileChooserParams.getAcceptTypes());
+                  }
+
+                  if (contentType.isEmpty()) {
+                    contentType = "image/*";
+                  }
+
+                  final Uri uri = WebViewFlutterPlugin.openFileChooser(contentType).get();
+                  if (uri == null) {
+                    filePathCallback.onReceiveValue(null);
+                  } else {
+                    filePathCallback.onReceiveValue(new Uri[] {uri});
+                  }
+                } catch (ExecutionException | InterruptedException e) {
+                  e.printStackTrace();
+                  filePathCallback.onReceiveValue(null);
+                }
+              });
+      return true;
+    }
 
     @Override
     public boolean onCreateWindow(
@@ -187,14 +227,11 @@ public class WebChromeClientHostApiImpl implements WebChromeClientHostApi {
       WebChromeClientCreator webChromeClientCreator,
       WebChromeClientFlutterApiImpl flutterApi) {
     this.instanceManager = instanceManager;
-    this.webChromeClientCreator = webChromeClientCreator;
-    this.flutterApi = flutterApi;
+    webChromeClient = webChromeClientCreator.createWebChromeClient(flutterApi);
   }
 
   @Override
-  public void create(Long instanceId) {
-    final WebChromeClient webChromeClient =
-        webChromeClientCreator.createWebChromeClient(flutterApi);
+  public void create(@NonNull Long instanceId) {
     instanceManager.addDartCreatedInstance(webChromeClient, instanceId);
   }
 
